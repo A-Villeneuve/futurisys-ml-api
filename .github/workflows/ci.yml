@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - developpement
+
   pull_request:
     branches:
       - developpement
@@ -12,6 +13,28 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: futurisys_api
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: futurisys_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U futurisys_api -d futurisys_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://futurisys_api:test_password@localhost:5432/futurisys_test
+
+      # app/database.py a besoin de cette variable lors de l'import.
+      # Cette base CI est temporaire : ce ne sont pas des identifiants réels.
+      DATABASE_URL: postgresql+psycopg://futurisys_api:test_password@localhost:5432/futurisys_test
 
     steps:
       - name: Récupérer le code
@@ -24,7 +47,11 @@ jobs:
         run: uv python install 3.12
 
       - name: Installer les dépendances
-        run: uv sync
+        run: uv sync --dev
 
-      - name: Vérifier que Python fonctionne
-        run: uv run python --version
+      - name: Exécuter les tests avec couverture
+        run: >
+          uv run pytest
+          --cov=app
+          --cov-report=term-missing
+          --cov-fail-under=90
