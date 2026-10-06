@@ -31,9 +31,6 @@ jobs:
 
     env:
       TEST_DATABASE_URL: postgresql+psycopg://futurisys_api:test_password@localhost:5432/futurisys_test
-
-      # app/database.py a besoin de cette variable lors de l'import.
-      # Cette base CI est temporaire : ce ne sont pas des identifiants réels.
       DATABASE_URL: postgresql+psycopg://futurisys_api:test_password@localhost:5432/futurisys_test
 
     steps:
@@ -55,3 +52,14 @@ jobs:
           --cov=app
           --cov-report=term-missing
           --cov-fail-under=90
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: tests
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Construire l'image Docker
+        run: docker build -t futurisys-ml-api .
