@@ -75,6 +75,10 @@ class EmployeeInput(BaseModel):
     nb_formations_suivies: int = Field(ge=0)
 
 
+class EmployeeCreate(EmployeeInput):
+    id_employee: int = Field(gt=0)
+    a_quitte_l_entreprise: Literal["Non", "Oui"]
+
 class PredictionResponse(BaseModel):
     prediction_id: int
     probability: float = Field(ge=0, le=1)
