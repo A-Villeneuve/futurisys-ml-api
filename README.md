@@ -4,6 +4,12 @@ API REST de prédiction du risque d'attrition des employés, développée avec F
 
 Le projet comprend une base de données PostgreSQL, un système d'authentification par clé API, des tests automatisés et un déploiement local avec Docker Compose.
 
+**Version du projet :** `v1.0.1`
+
+**Dépôt GitHub :** [Futurisys ML API](https://github.com/A-Villeneuve/futurisys-ml-api)
+
+---
+
 ## 1. Contexte et objectifs
 
 Futurisys est une entreprise fictive souhaitant anticiper les départs de ses collaborateurs.
@@ -54,7 +60,7 @@ L'application repose sur les composants suivants :
                       |
               Modèle ML chargé
                       |
-               Prédiction
+                 Prédiction
                       |
                       v
                  PostgreSQL
@@ -64,7 +70,16 @@ L'application repose sur les composants suivants :
 
 L'API utilise un modèle de Machine Learning sérialisé et chargé au démarrage.
 
-Les demandes de prédiction et leurs résultats sont enregistrés en base afin de permettre leur consultation et leur traçabilité.
+Les demandes de prédiction et leurs résultats sont enregistrés en base afin d'assurer leur traçabilité.
+
+L'architecture sépare les responsabilités :
+
+- **FastAPI** gère les requêtes HTTP et les réponses.
+- **Pydantic** valide les données entrantes.
+- **Scikit-learn** réalise les prédictions.
+- **SQLAlchemy** assure les interactions avec PostgreSQL.
+- **PostgreSQL** conserve les données et les historiques.
+- **Docker Compose** orchestre les services nécessaires.
 
 ## 3. Modèle de Machine Learning
 
@@ -101,6 +116,18 @@ Le rappel est particulièrement important dans ce contexte : il mesure la propor
 
 Les prédictions restent des estimations statistiques et ne constituent pas des certitudes sur le comportement individuel des employés.
 
+### Modèle sérialisé
+
+Le modèle entraîné est disponible dans :
+
+```text
+models/attrition_pipeline.joblib
+```
+
+Ce fichier est inclus dans le dépôt GitHub et dans l'image Docker.
+
+Il permet d'exécuter les prédictions sans devoir réentraîner le modèle à chaque démarrage de l'application.
+
 ## 4. Organisation du dépôt
 
 ```text
@@ -111,8 +138,15 @@ futurisys-ml-api/
 |       `-- ci.yml
 |
 |-- app/
+|   |-- auth.py
+|   |-- database.py
+|   |-- db_models.py
 |   |-- main.py
-|   `-- ...
+|   |-- schemas.py
+|   `-- ml/
+|       |-- __init__.py
+|       |-- feature_engineering.py
+|       `-- predictor.py
 |
 |-- models/
 |   `-- attrition_pipeline.joblib
@@ -125,15 +159,21 @@ futurisys-ml-api/
 |   `-- train_model.py
 |
 |-- tests/
-|   `-- ...
+|   |-- conftest.py
+|   |-- integration/
+|   `-- unit/
 |
 |-- data/
-|   `-- fichiers sources locaux
+|   |-- extrait_sirh.csv
+|   |-- extrait_eval.csv
+|   `-- extrait_sondage.csv
 |
 |-- docs/
 |   `-- diagERD_P5.png
 |
+|-- .dockerignore
 |-- .env.example
+|-- .gitignore
 |-- Dockerfile
 |-- compose.yaml
 |-- pyproject.toml
@@ -141,9 +181,23 @@ futurisys-ml-api/
 `-- README.md
 ```
 
-Le répertoire `data/` contient les données sources utilisées pour l'entraînement et l'importation des employés.
+### Données du projet
 
-Ces données ne sont pas intégrées à l'image Docker.
+Le répertoire `data/` contient les trois fichiers CSV fictifs fournis dans le cadre du projet pédagogique.
+
+Ces fichiers sont **versionnés dans le dépôt GitHub** et sont donc automatiquement disponibles après le clonage du projet.
+
+Ils permettent notamment de :
+
+- reproduire l'entraînement du modèle ;
+- préparer les données RH ;
+- importer les employés dans PostgreSQL.
+
+Les fichiers CSV ne sont toutefois **pas intégrés à l'image Docker**.
+
+Cette séparation permet de conserver une image applicative indépendante des données sources.
+
+Pour importer les employés, les fichiers sont montés temporairement dans un conteneur Docker.
 
 ## 5. Prérequis
 
@@ -160,8 +214,17 @@ Docker Compose permet de démarrer l'application sans installer manuellement Pos
 
 ### 6.1. Récupérer le dépôt
 
+Avec SSH :
+
 ```bash
 git clone git@github.com:A-Villeneuve/futurisys-ml-api.git
+cd futurisys-ml-api
+```
+
+Il est également possible de cloner le dépôt avec HTTPS :
+
+```bash
+git clone https://github.com/A-Villeneuve/futurisys-ml-api.git
 cd futurisys-ml-api
 ```
 
@@ -187,6 +250,8 @@ Un mot de passe peut être généré avec :
 openssl rand -hex 24
 ```
 
+La valeur générée doit être copiée dans le fichier `.env`.
+
 Le fichier `.env` contient des informations sensibles et ne doit jamais être ajouté au dépôt Git.
 
 ### 6.3. Installer les dépendances Python
@@ -198,6 +263,8 @@ uv sync --dev
 ```
 
 Les dépendances sont définies dans `pyproject.toml` et verrouillées dans `uv.lock`.
+
+Pour exécuter les commandes Python dans l'environnement du projet, il est possible d'utiliser `uv run`.
 
 ## 7. Déploiement local avec Docker Compose
 
@@ -266,6 +333,8 @@ La spécification OpenAPI est accessible à l'adresse :
 
 http://localhost:8000/openapi.json
 
+Swagger permet de consulter les endpoints, leurs paramètres, les schémas Pydantic et les réponses attendues.
+
 ## 8. Initialisation des données
 
 ### 8.1. Structure de la base
@@ -283,13 +352,15 @@ L'application utilise six tables principales :
 
 Le schéma relationnel est disponible dans :
 
-`docs/diagERD_P5.png`
+```text
+docs/diagERD_P5.png
+```
 
 ### 8.2. Importer les employés
 
-L'importation des employés nécessite les fichiers de données sources dans le dossier local `data/`.
+Les données sources sont directement incluses dans le dépôt GitHub.
 
-Les fichiers attendus sont :
+Après le clonage du projet, les trois fichiers suivants sont déjà présents :
 
 ```text
 data/
@@ -298,7 +369,11 @@ data/
 `-- extrait_sondage.csv
 ```
 
-Une fois ces fichiers présents, exécuter :
+**Aucun téléchargement supplémentaire n'est nécessaire.**
+
+L'importation des employés dans PostgreSQL est une opération distincte de l'initialisation des tables et du modèle.
+
+Après avoir démarré l'application avec Docker Compose, exécuter depuis la racine du projet :
 
 ```bash
 docker compose run --rm --no-deps \
@@ -306,11 +381,20 @@ docker compose run --rm --no-deps \
   api uv run python -m scripts.load_data
 ```
 
-Cette commande monte temporairement le dossier local `data/` dans le conteneur, en lecture seule.
+Cette commande :
+
+1. Crée un conteneur temporaire à partir de l'image de l'API.
+2. Monte le répertoire local `data/` dans le conteneur.
+3. Rend les fichiers CSV accessibles en lecture seule.
+4. Exécute le script d'importation.
+5. Enregistre les employés dans PostgreSQL.
+6. Supprime le conteneur temporaire après son exécution.
 
 L'importation porte sur **1 470 employés**.
 
-Le script évite de réimporter les données lorsqu'il détecte que la table contient déjà des employés.
+Le script vérifie si des employés sont déjà présents dans la base avant de procéder à l'importation.
+
+Cette opération n'est donc pas nécessaire à chaque redémarrage de l'application.
 
 ### 8.3. Vérifier les données
 
@@ -394,11 +478,20 @@ Dans cet exemple, la probabilité estimée est d'environ 57 %, supérieure au se
 
 Le modèle classe donc l'employé dans la catégorie présentant un risque de départ.
 
+Les résultats sont enregistrés dans PostgreSQL afin de conserver un historique des prédictions réalisées.
+
 ## 10. Tests automatisés
 
 Le projet utilise Pytest pour vérifier le fonctionnement de l'application.
 
-Les tests couvrent notamment les fonctionnalités de l'API et les interactions avec la base de données.
+Les tests couvrent notamment :
+
+- la validation des données ;
+- les transformations de variables ;
+- le fonctionnement des endpoints ;
+- les interactions avec la base de données ;
+- les opérations liées aux employés ;
+- les prédictions.
 
 Une base PostgreSQL de test distincte est utilisée afin de ne pas modifier les données de l'application.
 
@@ -435,7 +528,9 @@ La couverture mesure la proportion du code exécutée pendant les tests. Elle ne
 
 Le workflow GitHub Actions est défini dans :
 
-`.github/workflows/ci.yml`
+```text
+.github/workflows/ci.yml
+```
 
 Il est déclenché lors :
 
@@ -468,7 +563,9 @@ Il :
 
 Les deux jobs ont été validés avec succès sur GitHub Actions.
 
-**Périmètre du pipeline :** il s'agit d'une intégration continue accompagnée d'un test automatisé de déploiement. Le workflow ne réalise pas de déploiement permanent sur un serveur de production.
+**Périmètre du pipeline :** il s'agit d'une intégration continue accompagnée d'un test automatisé de déploiement.
+
+Le workflow ne réalise pas de déploiement permanent sur un serveur de production.
 
 ## 12. Persistance des données
 
@@ -509,6 +606,8 @@ main
 - `main` : branche destinée aux versions stables ;
 - `developpement` : intégration des fonctionnalités validées ;
 - `feature/*` : développement d'une fonctionnalité spécifique.
+
+Des branches `docs/*` sont également utilisées pour les modifications documentaires.
 
 Les fonctionnalités sont intégrées via des Pull Requests.
 
@@ -570,6 +669,49 @@ Pour suivre les logs de l'API :
 ```bash
 docker compose logs -f api
 ```
+
+## 16. Dépôt GitHub et version du projet
+
+Le code source de Futurisys ML API est hébergé sur GitHub.
+
+**Dépôt GitHub :**
+
+[https://github.com/A-Villeneuve/futurisys-ml-api](https://github.com/A-Villeneuve/futurisys-ml-api)
+
+**Version finale du projet :** `v1.0.1`
+
+**Version stable précédente :** `v1.0.0`
+
+### Historique et traçabilité du développement
+
+Le dépôt GitHub permet de consulter :
+
+- l'historique des commits ;
+- les différentes branches de développement ;
+- les Pull Requests et leurs validations ;
+- les résultats des workflows GitHub Actions ;
+- les versions identifiées par des tags Git.
+
+Les fonctionnalités ont été développées sur des branches dédiées, puis intégrées dans `developpement` avant leur fusion dans `main`.
+
+### Version livrée
+
+La version `v1.0.1` correspond à la version finale du projet remise dans le cadre de la formation.
+
+Elle comprend :
+
+- le code source de l'API FastAPI ;
+- le modèle de Machine Learning sérialisé ;
+- les scripts de gestion de la base PostgreSQL ;
+- les données fictives du projet ;
+- les tests automatisés ;
+- la configuration Docker Compose ;
+- le workflow GitHub Actions ;
+- la documentation technique.
+
+L'archive ZIP de livraison est générée à partir du tag Git `v1.0.1`, afin de garantir la correspondance entre les fichiers remis et la version publiée.
+
+Le dépôt GitHub constitue également une preuve du travail de versionnement et d'intégration continue réalisé tout au long du projet.
 
 ---
 
