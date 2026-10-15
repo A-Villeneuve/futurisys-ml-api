@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: futurisys
+      POSTGRES_USER: futurisys_api
+      POSTGRES_PASSWORD: ${DOCKER_DB_PASSWORD:?Définir DOCKER_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U futurisys_api -d futurisys
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://futurisys_api:${DOCKER_DB_PASSWORD}@db:5432/futurisys
+    command: >
+      sh -c "uv run python -m scripts.init_db &&
+             uv run python -m scripts.init_model"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://futurisys_api:${DOCKER_DB_PASSWORD}@db:5432/futurisys
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - developpement
+      - main
 
   pull_request:
     branches:
@@ -57,9 +58,44 @@ jobs:
     runs-on: ubuntu-latest
     needs: tests
 
+    env:
+      DOCKER_DB_PASSWORD: ci_test_password
+
     steps:
       - name: Récupérer le code
         uses: actions/checkout@v4
 
-      - name: Construire l'image Docker
-        run: docker build -t futurisys-ml-api .
+      - name: Construire et démarrer les conteneurs
+        run: docker compose up -d --build
+
+      - name: Vérifier le déploiement
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health > health.json; then
+              break
+            fi
+
+            echo "API non disponible, nouvelle tentative..."
+            sleep 2
+          done
+
+          python3 - <<'PY'
+          import json
+
+          with open("health.json", encoding="utf-8") as file:
+              health = json.load(file)
+
+          assert health["status"] == "healthy", health
+          assert health["database"] == "connected", health
+          assert health["model"] == "loaded", health
+
+          print("Déploiement Docker validé :", health)
+          PY
+
+      - name: Afficher les logs en cas d'échec
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Arrêter les conteneurs
+        if: always()
+        run: docker compose down -v

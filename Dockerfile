@@ -12,6 +12,7 @@ RUN uv sync --frozen --no-dev
 # L'API et le modèle sont nécessaires à l'exécution
 COPY app ./app
 COPY models ./models
+COPY scripts ./scripts
 
 EXPOSE 8000
 
