@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - developpement
+      - main
+
+  pull_request:
+    branches:
+      - developpement
+      - main
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: futurisys_api
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: futurisys_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U futurisys_api -d futurisys_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://futurisys_api:test_password@localhost:5432/futurisys_test
+      DATABASE_URL: postgresql+psycopg://futurisys_api:test_password@localhost:5432/futurisys_test
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Installer Python
+        run: uv python install 3.12
+
+      - name: Installer les dépendances
+        run: uv sync --dev
+
+      - name: Exécuter les tests avec couverture
+        run: >
+          uv run pytest
+          --cov=app
+          --cov-report=term-missing
+          --cov-fail-under=90
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: tests
+
+    env:
+      DOCKER_DB_PASSWORD: ci_test_password
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Construire et démarrer les conteneurs
+        run: docker compose up -d --build
+
+      - name: Vérifier le déploiement
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health > health.json; then
+              break
+            fi
+
+            echo "API non disponible, nouvelle tentative..."
+            sleep 2
+          done
+
+          python3 - <<'PY'
+          import json
+
+          with open("health.json", encoding="utf-8") as file:
+              health = json.load(file)
+
+          assert health["status"] == "healthy", health
+          assert health["database"] == "connected", health
+          assert health["model"] == "loaded", health
+
+          print("Déploiement Docker validé :", health)
+          PY
+
+      - name: Afficher les logs en cas d'échec
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Arrêter les conteneurs
+        if: always()
+        run: docker compose down -v
